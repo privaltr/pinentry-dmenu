@@ -1,0 +1,151 @@
+#!/bin/sh
+
+VERSION="0.1";
+
+if [ -z "$DISPLAY" ]; then
+    DISPLAY=":1";
+    export DISPLAY;
+fi
+
+title="";
+prompt_string="Password :: ";
+description="";
+keyinfo="";
+repeat="";
+
+error__password_mismatch="Passwords don't match";
+AP_YES="Yes";
+AP_NO="No";
+
+prompt_action='dmenu -P -p "$AP_PROMPT"';
+confirm_action='echo -e "$AP_YES"\n"$AP_NO" | dmenu -p "$AP_PROMPT"';
+display_error_action='notify-send -a "Pinentry" "$AP_ERROR"';
+
+# :: Prompt string (default if empty)
+ask_password() {
+  export AP_PROMPT="${1:-"$prompt_string"}";
+  printf '' | bash -c "$prompt_action" 2> /dev/null;
+}
+# :: Prompt string (default if empty)
+confirm() {
+  export AP_PROMPT="${1:-"$prompt_string"}";
+  export AP_YES; export AP_NO;
+  printf '' | bash -c "$confirm_action" 2> /dev/null;
+}
+# :: Error text
+show_error() {
+  export AP_ERROR="$1";
+  bash -c "$display_error_action" 2> /dev/null;
+}
+
+cancelled_error() { echo "ERR 99 Operation cancelled <Unspecified source>"; }
+com_error() { echo "ERR 99 Operation cancelled <Unspecified source>"; }
+
+
+
+
+save_option() {
+  echo "OK";
+}
+
+get_info() {
+  case "$1" in
+    version)  echo "D $VERSION" && echo "OK" ;;
+    pid)      echo "D $BASHPID" && echo "OK" ;;
+    *)        com_error ;;
+  esac;
+}
+
+# :: Repeat string -> Password -> OK | ERR
+password_prompt() {
+  pass="";
+  if pass=$(ask_password "$([ -z "$1" ] && echo "$repeat")"); then
+    if [ -n "$1" ]; then
+      password_prompt ""  "$pass";
+    else
+      # If password repeat attempt failed, try again,
+      # Else continue
+      if [ -n "$2" ] && [ "$pass" != "$2" ]; then
+        show_error "$error__password_mismatch";
+        password_prompt "$repeat";
+      else
+        [ -n "$pass" ] && echo "D $pass";
+        echo "OK";
+      fi;
+    fi;
+  else
+    cancelled_error;
+  fi;
+}
+
+# :: OK | ERR
+confirm_prompt() {
+  res="$(confirm)";
+  [ "$res" = "$AP_YES" ] && echo "OK" || cancelled_error;
+}
+
+interpret_command() {
+  cmd="$(echo "$1" | cut -d' ' -f1)";
+  data="$(echo "$1" | cut -d' ' -f2-)";
+
+  case "${cmd^^}" in
+    INIT)             echo "OK Pleased to meet you" ;;
+    OPTION)           save_option "$data" ;;
+    GETINFO)          get_info "$data" ;;
+    SETTITLE)         title="$data" && echo "OK" ;;
+    SETPROMPT)        prompt_string="$data" && echo "OK" ;;
+    SETKEYINFO)       keyinfo="$data" && echo "OK" ;;
+    SETREPEAT)        repeat="${data:-"repeat"}" && echo "OK" ;;
+	SETDESC)          KEYNAME=${data#*:%0A%22}; KEYNAME=${KEYNAME%\%22\%0A*}; KEYID=${data#*ID }; KEYID=${KEYID%,*}; description="$data" && echo OK ;;
+    SETREPEATERROR)   error__password_mismatch="$data" && echo "OK" ;;
+    CONFIRM)          confirm_prompt ;;
+    GETPIN)           prompt_string="gpg-agent: $KEYNAME ($KEYID)" && password_prompt "$repeat" "" ;;
+    BYE)              echo "OK closing connection" && exit 0 ;;
+    *)                echo "OK" ;;
+  esac;
+}
+
+
+
+
+help() {
+  echo "Usage: $0 [-D DISPLAY] [--prompt script] [--confirm script] [-hv]";
+}
+
+parse_cliargs() {
+  [ $# -le 0 ] && return 0;
+
+  case "$1" in
+    -D|--display)       export DISPLAY="$2"; shift 1 ;;
+    --error-command)    display_error_action="$2"; shift 1 ;;
+    --prompt)           prompt_action="$2"; shift 1 ;;
+    --confirm)          confirm_action="$2"; shift 1 ;;
+    -v|--version)       echo "pinentry-dmenu-$VERSION" && exit 0 ;;
+    -h|--help)          help && exit 0 ;;
+    *)                  help && exit 1 ;;
+  esac;
+
+  shift 1;
+  parse_cliargs "$@";
+}
+
+
+
+# Main
+parse_cliargs "$@";
+
+interpret_command "INIT";
+
+while read -r line; do
+  interpret_command "$line";
+done;
+
+#  "SETERROR"
+#  "SETOK"
+#  "SETNOTOK"
+#  "SETCANCEL"
+#  "MESSAGE"
+#  "SETQUALITYBAR"
+#  "SETQUALITYBAR_TT"
+#  "SETTIMEOUT"
+#  "CLEARPASSPHRASE"
