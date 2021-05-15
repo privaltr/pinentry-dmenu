@@ -1,0 +1,26 @@
+_gitname=pinentry-dmenu
+pkgname=pinentry-dmenu-git
+pkgver=1
+pkgrel=1
+pkgdesc="Pinentry-dmenu is a wrapping interface for dmenu instead of gnupg's pinentry. "
+arch=('i686' 'x86_64')
+url="https://github.com/ricksdomein/pinentry-dmenu"
+license=('GPL3')
+depends=('dmenu-ricksdomein-git' 'gnupg')
+makedepends=('git')
+provides=('pinentry-dmenu')
+source=("git+https://github.com/ricksdomein/$_gitname.git")
+md5sums=('SKIP')
+
+pkgver() {
+  cd "$_gitname"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    cd "${srcdir}/$_gitname"
+    cp pinentry-dmenu "$pkgdir"
+    mkdir -p /usr/share/licenses/pinentry-dmenu/
+    cp LICENSE /usr/share/licenses/pinentry-dmenu/
+    chmod 644 /usr/share/licenses/pinentry-dmenu/LICENSE
+}
